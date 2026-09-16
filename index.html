@@ -35,7 +35,7 @@
       color: #fff;
     }
     .row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: end; }
-    .row2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+    .row2 { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
     .out { min-height: 64px; white-space: pre-wrap; word-break: break-all; }
     .hidden { display: none; }
     button.flash {
@@ -68,6 +68,17 @@
           <label for="eip">eip register</label>
           <input id="eip" placeholder="0xXXXXXXXX" />
         </div>
+        <button type="button" id="btnOffset">calculate offset</button>
+      </div>
+    </div>
+
+    <div class="hidden" id="stepOffset">
+      <div class="out" id="offsetOut"></div>
+      <button type="button" id="btnCopyOffset">copy</button>
+    </div>
+
+    <div class="hidden" id="stepAddr">
+      <div class="row2">
         <div>
           <label for="addr">target addr</label>
           <input id="addr" placeholder="0xXXXXXXXX" />
@@ -123,9 +134,19 @@
       return false;
     }
 
+    function hideAfterPattern() {
+      $("stepOffset").classList.add("hidden");
+      $("stepAddr").classList.add("hidden");
+      $("step3").classList.add("hidden");
+      $("offsetOut").textContent = "";
+      $("payloadOut").textContent = "";
+      $("btnCopyOffset").classList.remove("flash");
+      $("btnCopy").classList.remove("flash");
+    }
+
     $("btnPattern").onclick = () => {
       const raw = $("size").value.trim();
-      $("step3").classList.add("hidden");
+      hideAfterPattern();
       if (isAddress(raw)) {
         const val = parseHex(raw);
         if (val === null) {
@@ -151,18 +172,35 @@
       $("step2").classList.remove("hidden");
     };
 
-    $("btnExploit").onclick = () => {
+    $("btnOffset").onclick = () => {
       const eip = parseHex($("eip").value);
-      const addr = parseHex($("addr").value);
       const pattern = $("patternOut").textContent;
-      if (eip === null || addr === null || !pattern) {
-        $("payloadOut").textContent = "invalid";
-        $("step3").classList.remove("hidden");
+      $("step3").classList.add("hidden");
+      $("stepAddr").classList.add("hidden");
+      $("payloadOut").textContent = "";
+      $("btnCopyOffset").classList.remove("flash");
+      $("btnCopy").classList.remove("flash");
+      if (eip === null || !pattern) {
+        $("offsetOut").textContent = "invalid";
+        $("stepOffset").classList.remove("hidden");
         return;
       }
       const offset = pattern.indexOf(String.fromCharCode(...packLE(eip)));
       if (offset < 0) {
-        $("payloadOut").textContent = "not found";
+        $("offsetOut").textContent = "not found";
+        $("stepOffset").classList.remove("hidden");
+        return;
+      }
+      $("offsetOut").textContent = String(offset);
+      $("stepOffset").classList.remove("hidden");
+      $("stepAddr").classList.remove("hidden");
+    };
+
+    $("btnExploit").onclick = () => {
+      const addr = parseHex($("addr").value);
+      const offset = parseInt($("offsetOut").textContent, 10);
+      if (addr === null || !Number.isInteger(offset) || offset < 0) {
+        $("payloadOut").textContent = "invalid";
         $("step3").classList.remove("hidden");
         return;
       }
@@ -176,13 +214,16 @@
       $("patternOut").textContent = "";
       $("step1out").classList.add("hidden");
       $("btnCopyOut").classList.remove("flash");
+      $("btnCopyOffset").classList.remove("flash");
       $("btnCopy").classList.remove("flash");
       $("eip").value = "";
       $("addr").value = "";
+      $("offsetOut").textContent = "";
       $("payloadOut").textContent = "";
       $("step2").classList.add("hidden");
+      $("stepOffset").classList.add("hidden");
+      $("stepAddr").classList.add("hidden");
       $("step3").classList.add("hidden");
-      $("btnCopy").textContent = "copy";
     };
 
     async function copyFrom(id, btn) {
@@ -197,6 +238,7 @@
     }
 
     $("btnCopyOut").onclick = () => copyFrom("patternOut", $("btnCopyOut"));
+    $("btnCopyOffset").onclick = () => copyFrom("offsetOut", $("btnCopyOffset"));
     $("btnCopy").onclick = () => copyFrom("payloadOut", $("btnCopy"));
   </script>
 </body>
